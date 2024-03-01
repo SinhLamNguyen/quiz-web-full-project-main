@@ -1,0 +1,66 @@
+package vn.vti.quizzy.controllers;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import vn.vti.quizzy.database.SequenceGeneratorService;
+import vn.vti.quizzy.dto.ResponseObject;
+import vn.vti.quizzy.dto.UserDTO;
+import vn.vti.quizzy.jwt.JwtTokenStore;
+import vn.vti.quizzy.models.User;
+import vn.vti.quizzy.repositories.UserRepository;
+import vn.vti.quizzy.security.PasswordEncoder;
+import vn.vti.quizzy.services.AuthService;
+import vn.vti.quizzy.services.UserService;
+
+
+@CrossOrigin(origins = "localhost:3000")
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+    @Autowired
+    AuthService authService;
+
+    @Autowired
+    UserService userService;
+
+    @Autowired
+    UserRepository userRepository;
+
+
+    @Autowired
+    SequenceGeneratorService sequenceGeneratorService;
+
+    @PostMapping("/signup")
+    public ResponseEntity<?> signUp(@RequestBody UserDTO userDTO) {
+        if (userService.findByUsername(userDTO.getUsername())!=null) {
+            return ResponseEntity.status(HttpStatus.OK).body(new ResponseObject(201, "null", "Username already exists"));
+        }
+        User requestUser = new User();
+        Long id = sequenceGeneratorService.generateSequence(User.SEQUENCE_NAME);
+        requestUser.setId(id);
+        requestUser.setEmail(userDTO.getEmail());
+        requestUser.setPassword(PasswordEncoder.getInstance().encodePassword(userDTO.getPassword()));
+        requestUser.setPhone(userDTO.getPhone());
+//        requestUser.setGoogleId("IT03123");
+        requestUser.setUsername(userDTO.getUsername());
+        requestUser.setStatus(1);
+        User user = userService.createUser(requestUser);
+        return ResponseEntity.status(HttpStatus.OK).body
+                (new ResponseObject(200, user, "success"));
+    }
+
+    @PostMapping("/signin")
+    public ResponseEntity<?> signIn(@RequestBody UserDTO userDTO) {
+        User user = userService.findByUsername((userDTO.getUsername()));
+        if (user == null || !PasswordEncoder.getInstance().matches(userDTO.getPassword(), user.getPassword())) {
+            return ResponseEntity.status(HttpStatus.OK)
+                    .body(new ResponseObject(201, user, "Token invalid"));
+        }
+        String token = authService.loginWithUsernameAndPassword(userDTO.getUsername(), userDTO.getPassword());
+        JwtTokenStore.getInstance().storeToken(userDTO.getUsername(), token);
+        return ResponseEntity.status(HttpStatus.OK).body
+                (new ResponseObject(200,user,token));
+    }
+}
